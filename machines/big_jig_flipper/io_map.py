@@ -4,6 +4,7 @@ X101-X109 proxes and robot handshake.
 Y201-Y211 hydraulic valves.
 C1-C14 sequencer. C101/C102 robot flip requests.
 C20 E-stop. C21 jog mode. C22-C31 jog pushes for the Click app.
+T1-T5 / TD1-TD5 settle timers (1 s) between clamp, lift, rotate, and set-down.
 
 Analog clamp (voltage linear sensor) is not mapped yet. When it lands, use a
 DF register for the raw volts and compare in calc() rungs. Do not reuse these
@@ -13,6 +14,11 @@ X/Y/C addresses.
 from pyrung.click import ClickBlocks, TagMap
 
 from machines.big_jig_flipper.logic import (
+    AfterClamp1,
+    AfterClamp2,
+    AfterDown,
+    AfterLift,
+    AfterRotate,
     AProx,
     AStartCheck,
     AllowJigSense,
@@ -115,5 +121,15 @@ mapping = TagMap(
         JogClamp2Out: blocks.c[29],
         JogRotateA: blocks.c[30],
         JogRotateB: blocks.c[31],
+        AfterClamp1.Done: blocks.t[1],
+        AfterClamp1.Acc: blocks.td[1],
+        AfterClamp2.Done: blocks.t[2],
+        AfterClamp2.Acc: blocks.td[2],
+        AfterLift.Done: blocks.t[3],
+        AfterLift.Acc: blocks.td[3],
+        AfterRotate.Done: blocks.t[4],
+        AfterRotate.Acc: blocks.td[4],
+        AfterDown.Done: blocks.t[5],
+        AfterDown.Acc: blocks.td[5],
     }
 )
