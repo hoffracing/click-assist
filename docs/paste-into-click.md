@@ -25,7 +25,11 @@ If Click is already open and ClickNick is connected with ODBC, you can push nick
 
 ## 4. Paste ladder
 
-**Guided Paste (preferred).** In ClickNick: **Ladder → Open in Guided Paste**, point it at `machines/<name>/export/`, and walk through each CSV. Import nicknames in that flow if you have not already.
+Guided Paste is not in Click Programming Software. Install ClickNick 0.19 or newer (`pip install "clicknick>=0.19"` then `clicknick`) with your `.ckp` already open.
+
+In the ClickNick window, open the Ladder menu and choose Open in Guided Paste. Some builds say Guided Paste. Point it at `machines/<name>/export/` (for the starter, `machines/starter_motor/export`) and walk through each CSV. Import nicknames in that flow if you have not already.
+
+If there is no Ladder menu, upgrade ClickNick.
 
 **Clipboard.** With Click running:
 
