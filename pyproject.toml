@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "click-assist"
+version = "0.1.0"
+description = "Author Click PLC ladder in Python, review it, then paste into Click Programming Software."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyrung>=0.11.0",
+    "laddercodec>=0.2.1",
+    "pyclickplc>=0.1.0",
+    "pytest>=8.0",
+]
+
+[project.optional-dependencies]
+clipboard = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.scripts]
+click-assist = "click_assist.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["machines"]
+pythonpath = ["src", "."]
+addopts = "-q"
