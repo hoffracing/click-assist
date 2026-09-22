@@ -69,53 +69,37 @@ RotateToBValve = Bool("RotateToBValve")
 AllowJigSense = Bool("AllowJigSense")
 
 with Program() as logic:
-    comment("Holding seals after first scan. Also true on set-down idle or while a side prox matches its start check.")
-    with rung(
-        Or(
-            And(SetDown, ~AStartCheck, ~BStartCheck),
-            Holding,
-            And(AStartCheck, AProx),
-            And(BStartCheck, BProx),
-            system.sys.first_scan,
-        )
-    ):
+    comment("Holding seals on first scan or reset-to-hold. Drops when a start check latches.")
+    with rung(Or(system.sys.first_scan, ResetToHold, Holding), ~AStartCheck, ~BStartCheck):
         out(Holding)
 
-    comment("Robot asks flip to A while holding. Drops when clamp-in starts. Seals if holding drops mid-request.")
+    comment("Robot asks flip to A while holding. Drops when either clamp-in bit latches.")
     with rung(
-        Or(
-            And(Holding, FlipToARbt, ~SlideClampsIn1, ~SlideClampsIn2),
-            And(AStartCheck, ~Holding),
-        )
+        Or(And(Holding, FlipToARbt), And(AStartCheck, ~Holding)),
+        ~SlideClampsIn1,
+        ~SlideClampsIn2,
     ):
         out(AStartCheck)
 
-    comment("Robot asks flip to B while holding. Same dropout as the A request.")
+    comment("Robot asks flip to B while holding. Drops when either clamp-in bit latches.")
     with rung(
-        Or(
-            And(Holding, FlipToBRbt, ~SlideClampsIn1, ~SlideClampsIn2),
-            And(BStartCheck, ~Holding),
-        )
+        Or(And(Holding, FlipToBRbt), And(BStartCheck, ~Holding)),
+        ~SlideClampsIn1,
+        ~SlideClampsIn2,
     ):
         out(BStartCheck)
 
     comment("Head-stock clamp in. Independent of tail stock. Drops when this side starts lifting.")
     with rung(
-        Or(
-            And(AStartCheck, BProx, ~Lift1),
-            And(BStartCheck, AProx, ~Lift1),
-            SlideClampsIn1,
-        )
+        Or(And(AStartCheck, BProx), And(BStartCheck, AProx), SlideClampsIn1),
+        ~Lift1,
     ):
         out(SlideClampsIn1)
 
-    comment("Tail-stock clamp in. Independent of head stock.")
+    comment("Tail-stock clamp in. Independent of head stock. Drops when this side starts lifting.")
     with rung(
-        Or(
-            And(AStartCheck, BProx, ~Lift2),
-            And(BStartCheck, AProx, ~Lift2),
-            SlideClampsIn2,
-        )
+        Or(And(AStartCheck, BProx), And(BStartCheck, AProx), SlideClampsIn2),
+        ~Lift2,
     ):
         out(SlideClampsIn2)
 
@@ -127,12 +111,18 @@ with Program() as logic:
     with rung(ClampedProx2):
         on_delay(AfterClamp2, SETTLE_MS)
 
-    comment("Head-stock lift after this side is clamped and settled. Does not wait for the tail-stock prox.")
-    with rung(Or(And(SlideClampsIn1, ClampedProx1, AfterClamp1.Done, ~FlipDirection), Lift1)):
+    comment("Head-stock lift after this side is clamped and settled. Drops when flip-direction latches.")
+    with rung(
+        Or(And(SlideClampsIn1, ClampedProx1, AfterClamp1.Done), Lift1),
+        ~FlipDirection,
+    ):
         out(Lift1)
 
-    comment("Tail-stock lift after this side is clamped and settled. Does not wait for the head-stock prox.")
-    with rung(Or(And(SlideClampsIn2, ClampedProx2, AfterClamp2.Done, ~FlipDirection), Lift2)):
+    comment("Tail-stock lift after this side is clamped and settled. Drops when flip-direction latches.")
+    with rung(
+        Or(And(SlideClampsIn2, ClampedProx2, AfterClamp2.Done), Lift2),
+        ~FlipDirection,
+    ):
         out(Lift2)
 
     comment("Lull after both lift-up proxes before rotate.")
@@ -150,33 +140,35 @@ with Program() as logic:
                 AfterLift.Done,
                 ClampedProx1,
                 ClampedProx2,
-                ~FlipToA,
-                ~FlipToB,
             ),
             FlipDirection,
-        )
+        ),
+        ~FlipToA,
+        ~FlipToB,
     ):
         out(FlipDirection)
 
     comment("Rotate toward A while still seeing B. Drops on set-down.")
-    with rung(Or(And(FlipDirection, BProx, ~SetDown), FlipToA)):
+    with rung(Or(And(FlipDirection, BProx), FlipToA), ~SetDown):
         out(FlipToA)
 
     comment("Rotate toward B while still seeing A. Drops on set-down.")
-    with rung(Or(And(FlipDirection, AProx, ~SetDown), FlipToB)):
+    with rung(Or(And(FlipDirection, AProx), FlipToB), ~SetDown):
         out(FlipToB)
 
     comment("Lull after the destination rotate prox before set-down.")
     with rung(Or(And(FlipToA, AProx), And(FlipToB, BProx))):
         on_delay(AfterRotate, SETTLE_MS)
 
-    comment("Set down after the destination prox and settle. Drops when clamp-out starts.")
+    comment("Set down after the destination prox and settle. Drops when either unclamp bit latches.")
     with rung(
         Or(
-            And(FlipToA, AProx, AfterRotate.Done, ~SlideClampsOut1, ~SlideClampsOut2),
-            And(FlipToB, BProx, AfterRotate.Done, ~SlideClampsOut1, ~SlideClampsOut2),
+            And(FlipToA, AProx, AfterRotate.Done),
+            And(FlipToB, BProx, AfterRotate.Done),
             SetDown,
-        )
+        ),
+        ~SlideClampsOut1,
+        ~SlideClampsOut2,
     ):
         out(SetDown)
 
@@ -185,14 +177,20 @@ with Program() as logic:
         on_delay(AfterDown, SETTLE_MS)
 
     comment("Unclamp after set-down settle when the robot jig-placed signal is on. Drops on reset-to-hold.")
-    with rung(Or(And(SetDown, AfterDown.Done, JigPlaced, ~ResetToHold), SlideClampsOut1)):
+    with rung(
+        Or(And(SetDown, AfterDown.Done, JigPlaced), SlideClampsOut1),
+        ~ResetToHold,
+    ):
         out(SlideClampsOut1)
 
     comment("Second unclamp bit. Original CSV sealed this on clamp-out 1, not on itself.")
-    with rung(Or(And(SetDown, AfterDown.Done, JigPlaced, ~ResetToHold), SlideClampsOut1)):
+    with rung(
+        Or(And(SetDown, AfterDown.Done, JigPlaced), SlideClampsOut1),
+        ~ResetToHold,
+    ):
         out(SlideClampsOut2)
 
-    comment("Reset to hold once both unclamp proxes prove the clamps are out. Original CSV never wrote C14.")
+    comment("Reset to hold once both unclamp proxes prove the clamps are out. Pulses Holding back on.")
     with rung(SlideClampsOut1, SlideClampsOut2, UnclampedProx1, UnclampedProx2):
         out(ResetToHold)
 
@@ -206,13 +204,12 @@ with Program() as logic:
     ):
         out(Lift1UpValve)
 
-    comment("Head-stock lift down. Jog, set-down, or rest. Dead on E-stop.")
+    comment("Head-stock lift down during jog or set-down. Off while waiting in hold. Dead on E-stop.")
     with rung(
         ~Estop,
         Or(
             And(JogMode, JogLift1Dn, ~JogLift1Up),
             And(~JogMode, SetDown),
-            And(~JogMode, Holding, ~Lift1),
         ),
     ):
         out(Lift1DnValve)
@@ -227,13 +224,12 @@ with Program() as logic:
     ):
         out(Lift2UpValve)
 
-    comment("Tail-stock lift down. Jog, set-down, or rest. Dead on E-stop.")
+    comment("Tail-stock lift down during jog or set-down. Off while waiting in hold. Dead on E-stop.")
     with rung(
         ~Estop,
         Or(
             And(JogMode, JogLift2Dn, ~JogLift2Up),
             And(~JogMode, SetDown),
-            And(~JogMode, Holding, ~Lift2),
         ),
     ):
         out(Lift2DnValve)
@@ -302,6 +298,6 @@ with Program() as logic:
     ):
         out(RotateToBValve)
 
-    comment("Allow jig sense while holding or setting down, not in E-stop.")
-    with rung(~Estop, Or(Holding, SetDown)):
+    comment("Allow jig sense while setting down. Off while waiting in hold. Dead on E-stop.")
+    with rung(~Estop, SetDown):
         out(AllowJigSense)

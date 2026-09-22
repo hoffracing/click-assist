@@ -24,15 +24,18 @@ from machines.big_jig_flipper.logic import (
     Lift1DnValve,
     Lift1UpValve,
     Lift2,
+    Lift2DnValve,
     Lift2UpValve,
     LiftUpProx1,
     LiftUpProx2,
     ResetToHold,
     RotateToAValve,
+    RotateToBValve,
     SetDown,
     SlideClampsIn1,
     SlideClampsOut1,
     Unclamp1Valve,
+    Unclamp2Valve,
     UnclampedProx1,
     UnclampedProx2,
     logic,
@@ -61,14 +64,37 @@ def _plc():
     return PLC(logic, dt=DT)
 
 
-def test_first_scan_seals_holding_and_allows_jig_sense():
+def _until(plc, tag, cycles=SETTLE_SCANS + 5):
+    for _ in range(cycles):
+        plc.step()
+        if tag.value:
+            return
+    raise AssertionError(f"{tag.name} never came on")
+
+
+def _assert_outputs_off():
+    for tag in (
+        Lift1UpValve,
+        Lift1DnValve,
+        Lift2UpValve,
+        Lift2DnValve,
+        Clamp1Valve,
+        Clamp2Valve,
+        Unclamp1Valve,
+        Unclamp2Valve,
+        RotateToAValve,
+        RotateToBValve,
+        AllowJigSense,
+    ):
+        assert tag.value is False, tag.name
+
+
+def test_wait_in_hold_leaves_every_output_off():
     with _plc() as plc:
         _rest_on_b()
         plc.step()
         assert Holding.value is True
-        assert AllowJigSense.value is True
-        assert Lift1DnValve.value is True
-        assert Lift1UpValve.value is False
+        _assert_outputs_off()
 
 
 def test_each_lift_runs_until_its_own_prox():
@@ -86,6 +112,7 @@ def test_each_lift_runs_until_its_own_prox():
 
         plc.run(cycles=3)
         assert Lift1.value is True
+        assert SlideClampsIn1.value is False
         assert Lift1UpValve.value is True
         assert Lift2.value is False
         assert Lift2UpValve.value is False
@@ -107,8 +134,12 @@ def test_each_lift_runs_until_its_own_prox():
         assert Lift2UpValve.value is False
         assert FlipDirection.value is False
 
-        plc.run(cycles=SETTLE_SCANS + 1)
+        _until(plc, FlipDirection)
         assert FlipDirection.value is True
+        assert FlipToA.value is True
+        plc.step()
+        assert FlipDirection.value is False
+        assert FlipToA.value is True
 
 
 def test_no_rotate_unless_both_clamps_are_in():
@@ -146,6 +177,10 @@ def test_flip_to_a_from_b():
         UnclampedProx1.value = False
         UnclampedProx2.value = False
         assert Clamp1Valve.value is True
+        plc.step()
+        assert Holding.value is False
+        assert AStartCheck.value is False
+        assert SlideClampsIn1.value is True
 
         ClampedProx1.value = True
         ClampedProx2.value = True
@@ -157,21 +192,31 @@ def test_flip_to_a_from_b():
 
         LiftUpProx1.value = True
         LiftUpProx2.value = True
-        plc.run(cycles=SETTLE_SCANS + 1)
-        assert FlipDirection.value is True
+        _until(plc, FlipDirection)
         assert FlipToA.value is True
         assert RotateToAValve.value is True
         assert FlipToB.value is False
+        assert Holding.value is False
+
+        plc.step()
+        assert FlipDirection.value is False
+        assert FlipToA.value is True
+        assert Lift1.value is False
+        assert Lift2.value is False
+        assert Lift1DnValve.value is False
 
         BProx.value = False
         AProx.value = True
         plc.step()
         assert SetDown.value is False
+        assert FlipToA.value is True
 
         plc.run(cycles=SETTLE_SCANS + 1)
         assert SetDown.value is True
+        assert FlipToA.value is False
         assert Lift1UpValve.value is False
         assert Lift1DnValve.value is True
+        assert AllowJigSense.value is True
 
         JigPlaced.value = True
         plc.step()
@@ -179,14 +224,24 @@ def test_flip_to_a_from_b():
 
         plc.run(cycles=SETTLE_SCANS + 1)
         assert SlideClampsOut1.value is True
+        assert SetDown.value is False
         assert Unclamp1Valve.value is True
         assert Clamp1Valve.value is False
 
+        FlipToARbt.value = False
         UnclampedProx1.value = True
         UnclampedProx2.value = True
         plc.step()
         assert ResetToHold.value is True
         assert Unclamp1Valve.value is False
+
+        plc.step()
+        assert Holding.value is True
+        assert ResetToHold.value is False
+        assert SlideClampsOut1.value is False
+        assert AStartCheck.value is False
+        assert SlideClampsIn1.value is False
+        _assert_outputs_off()
 
 
 def test_estop_drops_all_valves():

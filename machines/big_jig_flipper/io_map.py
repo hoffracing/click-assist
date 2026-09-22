@@ -1,7 +1,8 @@
 """Click address map for the big jig flipper.
 
 X101-X109 proxes and robot handshake.
-Y201-Y211 hydraulic valves.
+Y206-Y216 hydraulic valves on the bottom of the Y2 module.
+Lift1UpValve starts at Y206; each following output is the next address.
 C1-C14 sequencer. C101/C102 robot flip requests.
 C20 E-stop. C21 jog mode. C22-C31 jog pushes for the Click app.
 T1-T5 / TD1-TD5 settle timers (1 s) between clamp, lift, rotate, and set-down.
@@ -82,17 +83,17 @@ mapping = TagMap(
         LiftUpProx1: blocks.x[107],
         LiftUpProx2: blocks.x[108],
         JigPlaced: blocks.x[109],
-        Lift1UpValve: blocks.y[201],
-        Lift1DnValve: blocks.y[202],
-        Lift2UpValve: blocks.y[203],
-        Lift2DnValve: blocks.y[204],
-        Clamp1Valve: blocks.y[205],
-        Unclamp1Valve: blocks.y[206],
-        Clamp2Valve: blocks.y[207],
-        Unclamp2Valve: blocks.y[208],
-        RotateToAValve: blocks.y[209],
-        RotateToBValve: blocks.y[210],
-        AllowJigSense: blocks.y[211],
+        Lift1UpValve: blocks.y[206],
+        Lift1DnValve: blocks.y[207],
+        Lift2UpValve: blocks.y[208],
+        Lift2DnValve: blocks.y[209],
+        Clamp1Valve: blocks.y[210],
+        Unclamp1Valve: blocks.y[211],
+        Clamp2Valve: blocks.y[212],
+        Unclamp2Valve: blocks.y[213],
+        RotateToAValve: blocks.y[214],
+        RotateToBValve: blocks.y[215],
+        AllowJigSense: blocks.y[216],
         Holding: blocks.c[1],
         AStartCheck: blocks.c[2],
         BStartCheck: blocks.c[3],
