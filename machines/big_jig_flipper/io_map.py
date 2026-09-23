@@ -1,11 +1,18 @@
 """Click address map for the big jig flipper.
 
-X101-X109 proxes and robot handshake.
-Y206-Y216 hydraulic valves on the bottom of the Y2 module.
-Lift1UpValve starts at Y206; each following output is the next address.
-C1-C14 sequencer. C101/C102 robot flip requests.
-C20 E-stop. C21 jog mode. C22-C31 jog pushes for the Click app.
-T1-T5 / TD1-TD5 settle timers (1 s) between clamp, lift, rotate, and set-down.
+X101-X109 proxes. X109 is the jig-fully-placed switch, wired to the PLC.
+Robot commands are the EtherNet/IP words.
+DS1-DS4 to the scanner: ready, place error, at A, at B.
+DS5 flip to A, DS6 flip to B, DS8 error ack, from the scanner. DS7 is spare.
+DS9-DS20 from the scanner are the pendant jog commands. DS20 links both lifts.
+Y206-Y216 outputs on the bottom of the Y2 module.
+AllowJigSense is Y206; each following valve is the next address.
+C1-C14 sequencer. C15 place error. C104 error ack.
+C101/C102 robot flip requests, copied from DS5 and DS6.
+C20 E-stop. C32 holds that E-stop until the robot requests drop.
+C21 jog mode. C22-C31 jog pushes, copied from DS9-DS19. DS20 links those lifts.
+T1-T5 / TD1-TD5 settle timers (1 s).
+T6 / TD6 jig-placed timeout (40 s).
 
 Analog clamp (voltage linear sensor) is not mapped yet. When it lands, use a
 DF register for the raw volts and compare in calc() rungs. Do not reuse these
@@ -29,7 +36,9 @@ from machines.big_jig_flipper.logic import (
     Clamp2Valve,
     ClampedProx1,
     ClampedProx2,
+    ErrorAck,
     Estop,
+    EstopHold,
     FlipDirection,
     FlipToA,
     FlipToARbt,
@@ -56,7 +65,28 @@ from machines.big_jig_flipper.logic import (
     Lift2UpValve,
     LiftUpProx1,
     LiftUpProx2,
+    PlaceError,
+    PlaceTimeout,
     ResetToHold,
+    RobotAtA,
+    RobotAtB,
+    RobotError,
+    RobotErrorAck,
+    RobotFlipA,
+    RobotFlipB,
+    RobotJogClamp1In,
+    RobotJogClamp1Out,
+    RobotJogClamp2In,
+    RobotJogClamp2Out,
+    RobotJogLift1Dn,
+    RobotJogLift1Up,
+    RobotJogLift2Dn,
+    RobotJogLift2Up,
+    RobotJogLink,
+    RobotJogMode,
+    RobotJogRotateA,
+    RobotJogRotateB,
+    RobotReady,
     RotateToAValve,
     RotateToBValve,
     SetDown,
@@ -83,17 +113,36 @@ mapping = TagMap(
         LiftUpProx1: blocks.x[107],
         LiftUpProx2: blocks.x[108],
         JigPlaced: blocks.x[109],
-        Lift1UpValve: blocks.y[206],
-        Lift1DnValve: blocks.y[207],
-        Lift2UpValve: blocks.y[208],
-        Lift2DnValve: blocks.y[209],
-        Clamp1Valve: blocks.y[210],
-        Unclamp1Valve: blocks.y[211],
-        Clamp2Valve: blocks.y[212],
-        Unclamp2Valve: blocks.y[213],
-        RotateToAValve: blocks.y[214],
-        RotateToBValve: blocks.y[215],
-        AllowJigSense: blocks.y[216],
+        RobotReady: blocks.ds[1],
+        RobotError: blocks.ds[2],
+        RobotAtA: blocks.ds[3],
+        RobotAtB: blocks.ds[4],
+        RobotFlipA: blocks.ds[5],
+        RobotFlipB: blocks.ds[6],
+        RobotErrorAck: blocks.ds[8],
+        RobotJogMode: blocks.ds[9],
+        RobotJogLift1Up: blocks.ds[10],
+        RobotJogLift1Dn: blocks.ds[11],
+        RobotJogLift2Up: blocks.ds[12],
+        RobotJogLift2Dn: blocks.ds[13],
+        RobotJogClamp1In: blocks.ds[14],
+        RobotJogClamp1Out: blocks.ds[15],
+        RobotJogClamp2In: blocks.ds[16],
+        RobotJogClamp2Out: blocks.ds[17],
+        RobotJogRotateA: blocks.ds[18],
+        RobotJogRotateB: blocks.ds[19],
+        RobotJogLink: blocks.ds[20],
+        AllowJigSense: blocks.y[206],
+        Lift1UpValve: blocks.y[207],
+        Lift1DnValve: blocks.y[208],
+        Lift2UpValve: blocks.y[209],
+        Lift2DnValve: blocks.y[210],
+        Clamp1Valve: blocks.y[211],
+        Unclamp1Valve: blocks.y[212],
+        Clamp2Valve: blocks.y[213],
+        Unclamp2Valve: blocks.y[214],
+        RotateToAValve: blocks.y[215],
+        RotateToBValve: blocks.y[216],
         Holding: blocks.c[1],
         AStartCheck: blocks.c[2],
         BStartCheck: blocks.c[3],
@@ -108,9 +157,12 @@ mapping = TagMap(
         SlideClampsOut1: blocks.c[12],
         SlideClampsOut2: blocks.c[13],
         ResetToHold: blocks.c[14],
+        PlaceError: blocks.c[15],
         FlipToARbt: blocks.c[101],
         FlipToBRbt: blocks.c[102],
+        ErrorAck: blocks.c[104],
         Estop: blocks.c[20],
+        EstopHold: blocks.c[32],
         JogMode: blocks.c[21],
         JogLift1Up: blocks.c[22],
         JogLift1Dn: blocks.c[23],
@@ -132,5 +184,7 @@ mapping = TagMap(
         AfterRotate.Acc: blocks.td[4],
         AfterDown.Done: blocks.t[5],
         AfterDown.Acc: blocks.td[5],
+        PlaceTimeout.Done: blocks.t[6],
+        PlaceTimeout.Acc: blocks.td[6],
     }
 )
